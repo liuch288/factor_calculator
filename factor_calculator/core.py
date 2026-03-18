@@ -68,8 +68,8 @@ class FactorCalculator:
             
         if md_engine_class is None:
             try:
-                from rbt.md import MdEngine
-                self.MdEngine = MdEngine
+                from rbt.md import FuturesMdEngine
+                self.MdEngine = FuturesMdEngine
             except ImportError:
                 self.MdEngine = None
         else:
