@@ -26,7 +26,8 @@ class FactorCalculator:
     
     Example:
         >>> calculator = FactorCalculator(
-        ...     db_directory="/path/to/results",
+        ...     root_path="/path/to/results",
+        ...     frequency="tick",
         ...     md_directory="/path/to/market/data"
         ... )
         >>> units = ["KlineDMU(interval=5)", "BiquotePEU(watching_time=60)"]
@@ -42,27 +43,44 @@ class FactorCalculator:
     
     def __init__(
         self,
-        db_directory: str,
+        root_path: str = None,
         md_directory: Optional[str] = None,
+        frequency: str = "tick",
         result_db_class=None,
         md_engine_class=None,
+        # Backward compatibility: db_directory -> root_path
+        db_directory: str = None,
     ):
         """
         Initialize FactorCalculator.
         
         Args:
-            db_directory: Directory to store/retrieve factor results
+            root_path: Root path for FactorStore (formerly db_directory)
             md_directory: Directory containing market data files
-            result_db_class: Optional custom ResultDB class (defaults to RBT's ResultDB)
+            frequency: Data frequency (default: "tick")
+            result_db_class: Optional custom ResultDB class (defaults to FsResultDB)
             md_engine_class: Optional custom MdEngine class
+            db_directory: (Deprecated) Use root_path instead
         """
-        self.db_directory = db_directory
+        # Handle backward compatibility
+        if root_path is None and db_directory is not None:
+            root_path = db_directory
+        
+        self.root_path = root_path
+        self.db_directory = root_path  # Backward compatibility alias
         self.md_directory = md_directory
+        self.frequency = frequency
         
         # Import RBT classes if not provided
         if result_db_class is None:
-            from rbt.result_db import ResultDB
-            self.ResultDB = ResultDB
+            # Try to import FsResultDB from local rbt first, then from installed package
+            try:
+                import sys
+                sys.path.insert(0, '/Users/boat/dev/rbt')
+                from rbt.result_db.fs_result_db import FsResultDB
+            except (ImportError, ModuleNotFoundError):
+                from rbt.result_db.fs_result_db import FsResultDB
+            self.ResultDB = FsResultDB
         else:
             self.ResultDB = result_db_class
             
@@ -82,7 +100,7 @@ class FactorCalculator:
     def result_db(self):
         """Lazy initialization of result database."""
         if self._result_db is None:
-            self._result_db = self.ResultDB(self.db_directory)
+            self._result_db = self.ResultDB(self.root_path, self.frequency)
         return self._result_db
     
     def calculate(
@@ -277,7 +295,8 @@ class FactorCalculator:
         if isinstance(trade_date, str):
             trade_date = datetime.datetime.strptime(trade_date, "%Y-%m-%d").date()
         
-        return self.result_db.get_existed_columns(contract, trade_date)
+        # FsResultDB uses 'sym' instead of 'contract'
+        return self.result_db.get_existing_factors(contract, trade_date)
     
     def save_factors(
         self,
@@ -307,23 +326,37 @@ class SimpleFactorCalculator:
     without requiring the full RBT framework setup.
     """
     
-    def __init__(self, db_directory: str):
+    def __init__(self, root_path: str = None, frequency: str = "tick", db_directory: str = None):
         """
         Initialize SimpleFactorCalculator.
         
         Args:
-            db_directory: Directory to store/retrieve factor results
+            root_path: Root path for FactorStore (formerly db_directory)
+            frequency: Data frequency (default: "tick")
+            db_directory: (Deprecated) Use root_path instead
         """
-        self.db_directory = db_directory
-        from rbt.result_db import ResultDB
-        self.ResultDB = ResultDB
+        # Handle backward compatibility
+        if root_path is None and db_directory is not None:
+            root_path = db_directory
+        
+        self.root_path = root_path
+        self.db_directory = root_path  # Backward compatibility alias
+        self.frequency = frequency
+        # Try to import FsResultDB from local rbt first, then from installed package
+        try:
+            import sys
+            sys.path.insert(0, '/Users/boat/dev/rbt')
+            from rbt.result_db.fs_result_db import FsResultDB
+        except (ImportError, ModuleNotFoundError):
+            from rbt.result_db.fs_result_db import FsResultDB
+        self.ResultDB = FsResultDB
         self._result_db = None
     
     @property
     def result_db(self):
         """Lazy initialization of result database."""
         if self._result_db is None:
-            self._result_db = self.ResultDB(self.db_directory)
+            self._result_db = self.ResultDB(self.root_path, self.frequency)
         return self._result_db
     
     def calculate_dmu(
