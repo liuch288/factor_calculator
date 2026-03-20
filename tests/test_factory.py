@@ -60,43 +60,42 @@ class TestParseParameters:
     
     def test_empty_string(self):
         """Test parsing empty parameter string."""
-        assert parse_parameters("") == {}
+        assert parse_parameters("") == ([], {})
     
     def test_single_int(self):
         """Test parsing a single integer."""
         result = parse_parameters("45")
-        assert result == {"value": 45}
+        assert result == ([45], {})
     
     def test_single_float(self):
         """Test parsing a single float."""
         result = parse_parameters("3.14")
-        assert result == {"value": 3.14}
+        assert result == ([3.14], {})
     
     def test_single_string(self):
         """Test parsing a single string."""
         result = parse_parameters("hello")
-        assert result == {"value": "hello"}
+        assert result == (["hello"], {})
     
     def test_single_kwarg_int(self):
         """Test parsing a single keyword argument integer."""
         result = parse_parameters("interval=5")
-        assert result == {"interval": 5}
+        assert result == ([], {"interval": 5})
     
     def test_single_kwarg_float(self):
         """Test parsing a single keyword argument float."""
         result = parse_parameters("threshold=3.14")
-        assert result == {"threshold": 3.14}
+        assert result == ([], {"threshold": 3.14})
     
     def test_multiple_kwargs(self):
         """Test parsing multiple keyword arguments."""
         result = parse_parameters("a=1, b=2, c=3")
-        assert result == {"a": 1, "b": 2, "c": 3}
+        assert result == ([], {"a": 1, "b": 2, "c": 3})
     
-    def test_mixed_value_and_kwargs(self):
-        """Test parsing value with keyword arguments."""
+    def test_mixed_positional_and_kwargs(self):
+        """Test parsing positional args with keyword arguments."""
         result = parse_parameters("60, watching_mds=100")
-        # This will be treated as value=60 for backward compatibility
-        assert "value" in result or "watching_mds" in result
+        assert result == ([60], {"watching_mds": 100})
 
 
 class TestParseValue:

@@ -5,11 +5,16 @@ This module provides the FactorCalculator class that orchestrates factor calcula
 by loading market data, creating units from specifications, and managing results.
 """
 
-import datetime
 import os
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
+
+from rbt.dmu import DecisionMakingUnit, PositionPnlDMU
+from rbt.md import FuturesMdEngine
+from rbt.peu import PnlEstimateUnit
+from rbt.result_db.fs_result_db import FsResultDB
+from rbt.strategy import Strategy
 
 from .factory import create_unit, create_units
 
@@ -46,8 +51,6 @@ class FactorCalculator:
         root_path: str = None,
         md_directory: Optional[str] = None,
         frequency: str = "tick",
-        result_db_class=None,
-        md_engine_class=None,
         # Backward compatibility: db_directory -> root_path
         db_directory: str = None,
     ):
@@ -58,8 +61,6 @@ class FactorCalculator:
             root_path: Root path for FactorStore (formerly db_directory)
             md_directory: Directory containing market data files
             frequency: Data frequency (default: "tick")
-            result_db_class: Optional custom ResultDB class (defaults to FsResultDB)
-            md_engine_class: Optional custom MdEngine class
             db_directory: (Deprecated) Use root_path instead
         """
         # Handle backward compatibility
@@ -71,37 +72,8 @@ class FactorCalculator:
         self.md_directory = md_directory
         self.frequency = frequency
         
-        # Import RBT classes if not provided
-        if result_db_class is None:
-            # Try to import FsResultDB from local rbt first, then from installed package
-            try:
-                import sys
-                sys.path.insert(0, '/Users/boat/dev/rbt')
-                from rbt.result_db.fs_result_db import FsResultDB
-            except (ImportError, ModuleNotFoundError):
-                from rbt.result_db.fs_result_db import FsResultDB
-            self.ResultDB = FsResultDB
-        else:
-            self.ResultDB = result_db_class
-            
-        if md_engine_class is None:
-            try:
-                from rbt.md import FuturesMdEngine
-                self.MdEngine = FuturesMdEngine
-            except ImportError:
-                self.MdEngine = None
-        else:
-            self.MdEngine = md_engine_class
-        
         # Initialize result database
-        self._result_db = None
-    
-    @property
-    def result_db(self):
-        """Lazy initialization of result database."""
-        if self._result_db is None:
-            self._result_db = self.ResultDB(self.root_path, self.frequency)
-        return self._result_db
+        self.result_db = FsResultDB(self.root_path, self.frequency)
     
     def calculate(
         self,
@@ -129,10 +101,6 @@ class FactorCalculator:
         Raises:
             ValueError: If required dependencies are missing
         """
-        # Parse trade_date
-        if isinstance(trade_date, str):
-            trade_date = datetime.datetime.strptime(trade_date, "%Y-%m-%d").date()
-        
         # Create unit instances from specifications
         dmus, peus = self._parse_units(units)
         
@@ -183,7 +151,7 @@ class FactorCalculator:
     def _load_previous_results(
         self,
         contract: str,
-        trade_date: datetime.date,
+        trade_date: str,
         load_factors: List[str],
     ) -> Dict[str, Any]:
         """
@@ -220,7 +188,7 @@ class FactorCalculator:
         dmus: List[Any],
         peus: List[Any],
         contract: str,
-        trade_date: datetime.date,
+        trade_date: str,
         frequency: str,
         previous_results: Dict[str, Any],
         recalculate: bool,
@@ -241,8 +209,6 @@ class FactorCalculator:
             DataFrame containing calculated factors
         """
         # Import RBT Strategy
-        from rbt.strategy import Strategy
-        from rbt.dmu import PositionPnlDMU
         
         # Initialize strategy
         strategy = Strategy(position_pnl_dmu_class=PositionPnlDMU)
@@ -258,13 +224,9 @@ class FactorCalculator:
         strategy.register_result_db(self.result_db)
         
         # Register market data engine
-        if self.MdEngine is not None:
-            md_engine = self.MdEngine(
-                sym=contract,
-                date=trade_date,
-                data_dir=self.md_directory,
-            )
-            strategy.register_md_engine(md_engine)
+        md_engine = FuturesMdEngine(base_path=self.md_directory)
+        md_engine.prepare_data(sym=contract, date=trade_date)
+        strategy.register_md_engine(md_engine)
         
         # Inject previous results as bgm
         bgm = previous_results if previous_results else None
@@ -292,10 +254,6 @@ class FactorCalculator:
         Returns:
             List of factor column names
         """
-        if isinstance(trade_date, str):
-            trade_date = datetime.datetime.strptime(trade_date, "%Y-%m-%d").date()
-        
-        # FsResultDB uses 'sym' instead of 'contract'
         return self.result_db.get_existing_factors(contract, trade_date)
     
     def save_factors(
@@ -312,9 +270,6 @@ class FactorCalculator:
             contract: Contract symbol
             trade_date: Trade date in YYYY-MM-DD format
         """
-        if isinstance(trade_date, str):
-            trade_date = datetime.datetime.strptime(trade_date, "%Y-%m-%d").date()
-        
         self.result_db.save_data(contract, trade_date, factors)
 
 
@@ -342,22 +297,8 @@ class SimpleFactorCalculator:
         self.root_path = root_path
         self.db_directory = root_path  # Backward compatibility alias
         self.frequency = frequency
-        # Try to import FsResultDB from local rbt first, then from installed package
-        try:
-            import sys
-            sys.path.insert(0, '/Users/boat/dev/rbt')
-            from rbt.result_db.fs_result_db import FsResultDB
-        except (ImportError, ModuleNotFoundError):
-            from rbt.result_db.fs_result_db import FsResultDB
-        self.ResultDB = FsResultDB
-        self._result_db = None
+        self.result_db = FsResultDB(self.root_path, self.frequency)
     
-    @property
-    def result_db(self):
-        """Lazy initialization of result database."""
-        if self._result_db is None:
-            self._result_db = self.ResultDB(self.root_path, self.frequency)
-        return self._result_db
     
     def calculate_dmu(
         self,
@@ -378,8 +319,6 @@ class SimpleFactorCalculator:
         Returns:
             DataFrame with calculated factors
         """
-        from rbt.dmu import DecisionMakingUnit
-        
         # Create DMU instance
         dmu = create_unit(dmu_spec)
         
@@ -422,8 +361,6 @@ class SimpleFactorCalculator:
         Returns:
             DataFrame with calculated factors
         """
-        from rbt.peu import PnlEstimateUnit
-        
         # Create PEU instance
         peu = create_unit(peu_spec)
         

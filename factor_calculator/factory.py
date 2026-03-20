@@ -159,56 +159,38 @@ def create_unit(spec: str) -> Any:
         )
     
     # Parse parameters
-    params = parse_parameters(params_str)
+    positional, keyword = parse_parameters(params_str)
     
     # Create instance
     try:
-        return cls(**params)
+        return cls(*positional, **keyword)
     except TypeError as e:
         raise ValueError(
-            f"Failed to instantiate '{class_name}' with params {params}: {e}"
+            f"Failed to instantiate '{class_name}' with args {positional}, kwargs {keyword}: {e}"
         )
 
 
-def parse_parameters(params_str: str) -> Dict[str, Any]:
+def parse_parameters(params_str: str) -> Tuple[List[Any], Dict[str, Any]]:
     """
-    Parse a parameter string into a dictionary.
+    Parse a parameter string into positional args and keyword args.
     
     Examples:
         >>> parse_parameters("45")
-        {}
+        ([45], {})
         >>> parse_parameters("interval=5, start_time=9:30")
-        {'interval': 5, 'start_time': datetime.time(9, 30)}
-        >>> parse_parameters("watching_time=60")
-        {'watching_time': 60}
+        ([], {'interval': 5, 'start_time': datetime.time(9, 30)})
+        >>> parse_parameters("1, watching_time=60")
+        ([1], {'watching_time': 60})
     
     Args:
         params_str: Parameter string (e.g., "45" or "interval=5, start_time=9:30")
         
     Returns:
-        Dictionary of parameter name to value
+        Tuple of (positional_args, keyword_args)
     """
     params_str = params_str.strip()
     if not params_str:
-        return {}
-    
-    # Check if it's a single positional argument (no keyword args)
-    # For cases like "KlineDMU(45)" where 45 is a positional arg
-    if "=" not in params_str:
-        # Try to parse as a single value
-        try:
-            # Try as integer
-            return {"value": int(params_str)}
-        except ValueError:
-            try:
-                # Try as float
-                return {"value": float(params_str)}
-            except ValueError:
-                # Keep as string
-                return {"value": params_str}
-    
-    # Parse keyword arguments
-    params = {}
+        return [], {}
     
     # Split by comma, but respect parentheses
     args = []
@@ -230,18 +212,17 @@ def parse_parameters(params_str: str) -> Dict[str, Any]:
     if current.strip():
         args.append(current.strip())
     
-    for arg in args:
-        if "=" not in arg:
-            continue
-        
-        key, value = arg.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        
-        # Parse value
-        params[key] = parse_value(value)
+    positional = []
+    keyword = {}
     
-    return params
+    for arg in args:
+        if "=" in arg:
+            key, value = arg.split("=", 1)
+            keyword[key.strip()] = parse_value(value.strip())
+        else:
+            positional.append(parse_value(arg))
+    
+    return positional, keyword
 
 
 def parse_value(value_str: str) -> Any:
