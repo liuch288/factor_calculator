@@ -213,20 +213,20 @@ class FactorCalculator:
         # Initialize strategy
         strategy = Strategy(position_pnl_dmu_class=PositionPnlDMU)
         
-        # Register units
+        # Register market data engine first (provides contract info for units)
+        md_engine = FuturesMdEngine(base_path=self.md_directory)
+        md_engine.prepare_data(sym=contract, date=trade_date)
+        strategy.register_md_engine(md_engine)
+        
+        # Register result database
+        strategy.register_result_db(self.result_db)
+        
+        # Register units (after md_engine so contract info is available)
         for dmu in dmus:
             strategy.register_dmu(dmu, recalculate=recalculate)
         
         for peu in peus:
             strategy.register_peu(peu, recalculate=recalculate)
-        
-        # Register result database
-        strategy.register_result_db(self.result_db)
-        
-        # Register market data engine
-        md_engine = FuturesMdEngine(base_path=self.md_directory)
-        md_engine.prepare_data(sym=contract, date=trade_date)
-        strategy.register_md_engine(md_engine)
         
         # Inject previous results as bgm
         bgm = previous_results if previous_results else None
