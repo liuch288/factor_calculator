@@ -8,7 +8,7 @@ This package provides utilities for:
 - Managing factor results in a database
 """
 
-from .core import FactorCalculator, SimpleFactorCalculator
+from .core import FactorCalculator
 from .factory import (
     create_unit,
     create_units,
@@ -22,7 +22,6 @@ __version__ = "0.1.0"
 
 __all__ = [
     "FactorCalculator",
-    "SimpleFactorCalculator",
     "create_unit",
     "create_units",
     "get_available_classes",

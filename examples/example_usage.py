@@ -8,7 +8,7 @@ if _local_path not in sys.path:
     sys.path.insert(0, _local_path)
 
 from factor_calculator import parse_unit_spec, get_available_classes, create_unit, create_units
-from factor_calculator import SimpleFactorCalculator, FactorCalculator
+from factor_calculator import FactorCalculator
 import pandas as pd
 import datetime
 
@@ -71,34 +71,12 @@ def section3_create_units():
         print(f"  - {u.name}")
 
 
-def section4_simple_calculator():
-    """4. SimpleFactorCalculator"""
-    print("\n" + "=" * 50)
-    print("4. SimpleFactorCalculator")
-    print("=" * 50)
-    
-    # 构造示例行情数据
-    md_data = pd.DataFrame({
-        "name": pd.date_range("2024-03-15 09:30", periods=10, freq="1min"),
-        "last_px": [100.0 + i * 0.1 for i in range(10)],
-        "tot_sz": [100 * (i + 1) for i in range(10)],
-        "oi": [1000 + i * 10 for i in range(10)],
-    })
-    md_data.set_index("name", inplace=True)
-    
-    print("示例行情数据:")
-    print(md_data)
-    
-    print("\n注意: SimpleFactorCalculator 需要 root_path 和实际数据")
-    print("用法:")
-    print("  calc = SimpleFactorCalculator(root_path='/path/to/db', frequency='tick')")
-    print("  result = calc.calculate_dmu(...)")
 
 
-def section5_full_calculator():
-    """5. FactorCalculator（完整集成）"""
+def section4_full_calculator():
+    """4. FactorCalculator（完整集成）"""
     print("\n" + "=" * 50)
-    print("5. FactorCalculator（完整版）")
+    print("4. FactorCalculator（完整版）")
     print("=" * 50)
     
     calc = FactorCalculator()
@@ -124,5 +102,4 @@ if __name__ == "__main__":
     section1_parse_unit_spec()
     section2_list_classes()
     section3_create_units()
-#    section4_simple_calculator()
-    section5_full_calculator()  # 需要数据文件
+    section4_full_calculator()  # 需要数据文件

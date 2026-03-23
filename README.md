@@ -92,24 +92,6 @@ class FactorCalculator:
         """保存计算后的因子。"""
 ```
 
-#### SimpleFactorCalculator
-
-简化版计算器，用于基本场景。
-
-```python
-class SimpleFactorCalculator:
-    def __init__(self, db_directory: str):
-        """初始化计算器。"""
-        
-    def calculate_dmu(self, dmu_spec: str, contract: str, trade_date: str,
-                      md_data: pd.DataFrame) -> pd.DataFrame:
-        """计算单个 DMU 因子。"""
-        
-    def calculate_peu(self, peu_spec: str, contract: str, trade_date: str,
-                      md_data: pd.DataFrame, previous_result: dict = None) -> pd.DataFrame:
-        """计算单个 PEU 因子。"""
-```
-
 ### factory.py
 
 ```python
