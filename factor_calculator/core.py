@@ -29,21 +29,7 @@ class FactorCalculator:
     - Run factor calculations with optional previous results
     - Save computed factors to a result database
     
-    Example:
-        >>> calculator = FactorCalculator(
-        ...     root_path="/path/to/results",
-        ...     frequency="tick",
-        ...     md_directory="/path/to/market/data"
-        ... )
-        >>> units = ["KlineDMU(interval=5)", "BiquotePEU(watching_time=60)"]
-        >>> load_factors = ["KlineDMU__open", "KlineDMU__close"]
-        >>> result = calculator.calculate(
-        ...     units=units,
-        ...     load_factors=load_factors,
-        ...     contract="IF2403",
-        ...     trade_date="2024-03-15",
-        ...     frequency="tick"
-        ... )
+
     """
     
     def __init__(
@@ -78,22 +64,23 @@ class FactorCalculator:
     def calculate(
         self,
         units: List[str],
-        load_factors: List[str],
         contract: str,
         trade_date: str,
         frequency: str = "tick",
         recalculate: bool = False,
+        bgm: Optional[Dict[str, Any]] = None,
     ) -> pd.DataFrame:
         """
         Execute factor calculation.
         
         Args:
             units: List of unit specifications (e.g., ["KlineDMU(5)", "BiquotePEU(60)"])
-            load_factors: List of factor names to load from previous results
             contract: Contract symbol (e.g., "IF2403")
             trade_date: Trade date in YYYY-MM-DD format
             frequency: Data frequency ("tick", "1min", "5min", etc.)
             recalculate: Whether to recalculate existing factors
+            bgm: Background parameters dict injected into every tick's
+                unit_results (e.g. constant config values).
             
         Returns:
             DataFrame containing calculated factor results
@@ -104,11 +91,6 @@ class FactorCalculator:
         # Create unit instances from specifications
         dmus, peus = self._parse_units(units)
         
-        # Load previous results if requested
-        previous_results = self._load_previous_results(
-            contract, trade_date, load_factors
-        )
-        
         # Run calculation using RBT Strategy
         return self._run_strategy(
             dmus=dmus,
@@ -116,7 +98,7 @@ class FactorCalculator:
             contract=contract,
             trade_date=trade_date,
             frequency=frequency,
-            previous_results=previous_results,
+            bgm=bgm,
             recalculate=recalculate,
         )
     
@@ -148,41 +130,6 @@ class FactorCalculator:
         
         return dmus, peus
     
-    def _load_previous_results(
-        self,
-        contract: str,
-        trade_date: str,
-        load_factors: List[str],
-    ) -> Dict[str, Any]:
-        """
-        Load previous factor results from the database.
-        
-        Args:
-            contract: Contract symbol
-            trade_date: Trade date
-            load_factors: List of factor names to load
-            
-        Returns:
-            Dictionary of previous results (factor_name -> value)
-        """
-        if not load_factors:
-            return {}
-        
-        # Get data from result DB
-        data = self.result_db.get_data(contract, trade_date)
-        
-        if data is None or data.empty:
-            return {}
-        
-        # Extract requested factors
-        previous_results = {}
-        for factor in load_factors:
-            if factor in data.columns:
-                # Get the latest value
-                previous_results[factor] = data[factor].iloc[-1]
-        
-        return previous_results
-    
     def _run_strategy(
         self,
         dmus: List[Any],
@@ -190,7 +137,7 @@ class FactorCalculator:
         contract: str,
         trade_date: str,
         frequency: str,
-        previous_results: Dict[str, Any],
+        bgm: Optional[Dict[str, Any]],
         recalculate: bool,
     ) -> pd.DataFrame:
         """
@@ -202,7 +149,8 @@ class FactorCalculator:
             contract: Contract symbol
             trade_date: Trade date
             frequency: Data frequency
-            previous_results: Previous factor results to inject
+            bgm: Background parameters injected into every tick (constants),
+                or None if not needed
             recalculate: Whether to recalculate existing factors
             
         Returns:
@@ -228,10 +176,10 @@ class FactorCalculator:
         for peu in peus:
             strategy.register_peu(peu, recalculate=recalculate)
         
-        # Inject previous results as bgm
-        bgm = previous_results if previous_results else None
-        
         # Run strategy
+        # bgm is for constant background params.
+        # Previous results are handled by Strategy internally via result_db's
+        # existed_data mechanism.
         strategy.run(bgm=bgm)
         
         # Return results
