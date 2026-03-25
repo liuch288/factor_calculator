@@ -37,12 +37,10 @@ def calculate(args):
     
     # Parse units
     units = args.units.split(",") if args.units else []
-    load_factors = args.load.split(",") if args.load else []
     
     # Run calculation
     result = calculator.calculate(
         units=units,
-        load_factors=load_factors,
         contract=args.contract,
         trade_date=args.date,
         frequency=args.frequency,
@@ -104,10 +102,6 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     calc_parser.add_argument(
         "--units", required=True,
         help="Comma-separated list of unit specifications"
-    )
-    calc_parser.add_argument(
-        "--load",
-        help="Comma-separated list of factors to load from previous results"
     )
     calc_parser.add_argument(
         "--contract", required=True,

@@ -29,21 +29,7 @@ class FactorCalculator:
     - Run factor calculations with optional previous results
     - Save computed factors to a result database
     
-    Example:
-        >>> calculator = FactorCalculator(
-        ...     root_path="/path/to/results",
-        ...     frequency="tick",
-        ...     md_directory="/path/to/market/data"
-        ... )
-        >>> units = ["KlineDMU(interval=5)", "BiquotePEU(watching_time=60)"]
-        >>> load_factors = ["KlineDMU__open", "KlineDMU__close"]
-        >>> result = calculator.calculate(
-        ...     units=units,
-        ...     load_factors=load_factors,
-        ...     contract="IF2403",
-        ...     trade_date="2024-03-15",
-        ...     frequency="tick"
-        ... )
+
     """
     
     def __init__(
@@ -78,7 +64,6 @@ class FactorCalculator:
     def calculate(
         self,
         units: List[str],
-        load_factors: List[str],
         contract: str,
         trade_date: str,
         frequency: str = "tick",
@@ -90,14 +75,12 @@ class FactorCalculator:
         
         Args:
             units: List of unit specifications (e.g., ["KlineDMU(5)", "BiquotePEU(60)"])
-            load_factors: List of factor names to load from previous results
             contract: Contract symbol (e.g., "IF2403")
             trade_date: Trade date in YYYY-MM-DD format
             frequency: Data frequency ("tick", "1min", "5min", etc.)
             recalculate: Whether to recalculate existing factors
             bgm: Background parameters dict injected into every tick's
-                unit_results (e.g. constant config values). This is NOT
-                the same as previous results / load_factors.
+                unit_results (e.g. constant config values).
             
         Returns:
             DataFrame containing calculated factor results
@@ -107,9 +90,6 @@ class FactorCalculator:
         """
         # Create unit instances from specifications
         dmus, peus = self._parse_units(units)
-        
-        # Pre-save previous results so they appear in result_db's existed_data
-        self._ensure_previous_results(contract, trade_date, load_factors)
         
         # Run calculation using RBT Strategy
         return self._run_strategy(
@@ -149,45 +129,6 @@ class FactorCalculator:
                 raise ValueError(f"Unknown unit type: {type(unit)}")
         
         return dmus, peus
-    
-    def _ensure_previous_results(
-        self,
-        contract: str,
-        trade_date: str,
-        load_factors: List[str],
-    ) -> None:
-        """
-        Ensure that previously calculated factors are present in the result DB.
-        
-        Strategy.run() loads existed_data from result_db and injects matching
-        columns into each tick's unit_results automatically. This method simply
-        verifies the requested factors exist; it does NOT need to return data
-        because Strategy handles that via result_db.get_data() internally.
-        
-        Args:
-            contract: Contract symbol
-            trade_date: Trade date
-            load_factors: List of factor names that must already exist in result_db
-            
-        Raises:
-            ValueError: If any requested factor is missing from the database
-        """
-        if not load_factors:
-            return
-        
-        # Get data from result DB
-        data = self.result_db.get_data(contract, trade_date)
-        
-        if data is None or data.empty:
-            missing = load_factors
-        else:
-            missing = [f for f in load_factors if f not in data.columns]
-        
-        if missing:
-            raise ValueError(
-                f"Required factors not found in result DB: {missing}. "
-                f"Please calculate them first."
-            )
     
     def _run_strategy(
         self,
@@ -236,7 +177,7 @@ class FactorCalculator:
             strategy.register_peu(peu, recalculate=recalculate)
         
         # Run strategy
-        # bgm is for constant background params (not previous results).
+        # bgm is for constant background params.
         # Previous results are handled by Strategy internally via result_db's
         # existed_data mechanism.
         strategy.run(bgm=bgm)

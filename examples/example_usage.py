@@ -88,7 +88,6 @@ def section4_full_calculator():
             # "BiquotePEU(1)",
             # "FixedHoldingPEU(10)",
         ],
-        load_factors=["KlineDMU__open", "KlineDMU__close"],
         contract="TL2603",
         trade_date=datetime.date(2026, 1, 5),
         frequency="tick",
