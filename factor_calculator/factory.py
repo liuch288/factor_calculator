@@ -453,15 +453,14 @@ def get_available_classes(suffix: str = None) -> List[str]:
 
     if suffix is None or suffix == "DMU":
         for base in MODULE_BASES:
-            for mod_name, parent_cls in [("rbt.dmu", DecisionMakingUnit)]:
-                try:
-                    mod = importlib.import_module(f"{base}.dmu")
-                    for name in dir(mod):
-                        obj = getattr(mod, name)
-                        if isinstance(obj, type) and issubclass(obj, parent_cls) and obj != parent_cls:
-                            classes.append(name)
-                except ImportError:
-                    pass
+            try:
+                mod = importlib.import_module(f"{base}.dmu")
+                for name in dir(mod):
+                    obj = getattr(mod, name)
+                    if isinstance(obj, type) and issubclass(obj, DecisionMakingUnit) and obj != DecisionMakingUnit:
+                        classes.append(name)
+            except ImportError:
+                pass
 
     if suffix is None or suffix == "PEU":
         for base in MODULE_BASES:
