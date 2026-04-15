@@ -29,24 +29,52 @@ def list_units(args):
 
 def calculate(args):
     """Run factor calculation."""
+    has_date = args.date is not None
+    has_start = args.start_date is not None
+    has_end = args.end_date is not None
+
+    # Validate mutual exclusivity
+    if has_date and (has_start or has_end):
+        print("Error: Cannot use --date with --start-date/--end-date. Use one mode only.")
+        sys.exit(1)
+
+    if has_start != has_end:
+        print("Error: Both --start-date and --end-date must be provided for multi-day mode.")
+        sys.exit(1)
+
+    if not has_date and not has_start:
+        print("Error: Must provide either --date or --start-date/--end-date.")
+        sys.exit(1)
+
     # Initialize calculator
     calculator = FactorCalculator(
         db_directory=args.db_directory,
         md_directory=args.md_directory,
     )
-    
-    # Parse units
+
     units = args.units.split(",") if args.units else []
-    
-    # Run calculation
-    result = calculator.calculate(
-        units=units,
-        contract=args.contract,
-        trade_date=args.date,
-        frequency=args.frequency,
-        recalculate=args.recalculate,
-    )
-    
+
+    if has_start and has_end:
+        # Multi-day mode
+        result = calculator.calculate(
+            units=units,
+            contract=args.contract,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            frequency=args.frequency,
+            recalculate=args.recalculate,
+            fail_fast=args.fail_fast,
+        )
+    else:
+        # Single-day mode
+        result = calculator.calculate(
+            units=units,
+            contract=args.contract,
+            trade_date=args.date,
+            frequency=args.frequency,
+            recalculate=args.recalculate,
+        )
+
     # Output results
     if args.output:
         result.to_pickle(args.output)
@@ -108,8 +136,20 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Contract symbol (e.g., IF2403)"
     )
     calc_parser.add_argument(
-        "--date", required=True,
+        "--date",
         help="Trade date (YYYY-MM-DD)"
+    )
+    calc_parser.add_argument(
+        "--start-date",
+        help="Start date for multi-day mode (YYYY-MM-DD)"
+    )
+    calc_parser.add_argument(
+        "--end-date",
+        help="End date for multi-day mode (YYYY-MM-DD)"
+    )
+    calc_parser.add_argument(
+        "--fail-fast", action="store_true",
+        help="Stop immediately on first daily calculation failure"
     )
     calc_parser.add_argument(
         "--frequency", default="tick",
