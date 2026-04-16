@@ -224,8 +224,8 @@ class TestMultiDayErrorHandling:
             fail_fast=False,
         )
 
-        # Days 1 and 3 succeed, day 2 fails → 2 save_data calls
-        assert calc.result_db.save_data.call_count == 2
+        # Days 1 and 3 succeed, day 2 fails → 2 successful strategy.run calls
+        assert mock_strategy.run.call_count == 3  # called 3 times, 1 failed
         assert isinstance(result, pd.DataFrame)
         assert not result.empty
         # Result should contain trade_date values for the 2 successful days
@@ -254,7 +254,7 @@ class TestMultiDayErrorHandling:
             )
 
         # Only the first day ran successfully before the second day failed
-        assert calc.result_db.save_data.call_count == 1
+        assert mock_strategy.run.call_count == 2  # day 1 ok, day 2 failed
 
     @patch("factor_calculator.core.FuturesMdEngine")
     @patch("factor_calculator.core.Strategy")

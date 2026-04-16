@@ -295,13 +295,12 @@ class FactorCalculator:
         # Create instances ONCE
         strategy = Strategy(position_pnl_dmu_class=PositionPnlDMU)
         md_engine = FuturesMdEngine(base_path=self.md_directory)
-        strategy.register_md_engine(md_engine)
         strategy.register_result_db(self.result_db)
 
-        for dmu in dmus:
-            strategy.register_dmu(dmu, recalculate=recalculate)
-        for peu in peus:
-            strategy.register_peu(peu, recalculate=recalculate)
+        # Defer md_engine and unit registration until the first successful
+        # prepare_data, because register_md_engine needs cur_sym to set
+        # contract_info, and register_dmu/peu needs contract_info.
+        units_registered = False
 
         results_list: List[pd.DataFrame] = []
         failed_dates: List[Tuple[date, Exception]] = []
@@ -311,15 +310,25 @@ class FactorCalculator:
         for i, current_date in enumerate(dates, 1):
             logger.info(f"[{i}/{total}] 正在计算 {current_date}")
             try:
-                md_engine.prepare_data(sym=contract, date=str(current_date))
+                md_engine.prepare_data(sym=contract, date=current_date)
+
+                # Register units on first successful data load (contract_info now available)
+                if not units_registered:
+                    strategy.register_md_engine(md_engine)
+                    for dmu in dmus:
+                        strategy.register_dmu(dmu, recalculate=recalculate)
+                    for peu in peus:
+                        strategy.register_peu(peu, recalculate=recalculate)
+                    units_registered = True
+
                 strategy.run(bgm=bgm)
 
                 day_result = pd.DataFrame.from_dict(
                     strategy.unit_results, orient="index"
                 )
-                day_result["trade_date"] = str(current_date)
 
-                self.result_db.save_data(contract, str(current_date), day_result)
+                # Strategy.run() already saves via result_db internally.
+                day_result["trade_date"] = str(current_date)
                 results_list.append(day_result)
                 success_count += 1
             except Exception as e:
