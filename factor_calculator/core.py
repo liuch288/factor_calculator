@@ -203,58 +203,30 @@ class FactorCalculator:
         dmus: List[Any],
         peus: List[Any],
         contract: str,
-        trade_date: str,
+        trade_date: date,
         frequency: str,
         bgm: Optional[Dict[str, Any]],
         recalculate: bool,
     ) -> pd.DataFrame:
         """
-        Run the RBT Strategy to compute factors.
-        
+        Run the RBT Strategy to compute factors for a single date.
+
         Args:
             dmus: List of DMU instances
             peus: List of PEU instances
             contract: Contract symbol
             trade_date: Trade date
             frequency: Data frequency
-            bgm: Background parameters injected into every tick (constants),
-                or None if not needed
+            bgm: Background parameters or None
             recalculate: Whether to recalculate existing factors
-            
+
         Returns:
             DataFrame containing calculated factors
         """
-        # Import RBT Strategy
-        
-        # Initialize strategy
-        strategy = Strategy(position_pnl_dmu_class=PositionPnlDMU)
-        
-        # Register market data engine first (provides contract info for units)
-        md_engine = FuturesMdEngine(base_path=self.md_directory)
-        md_engine.prepare_data(sym=contract, date=trade_date)
-        strategy.register_md_engine(md_engine)
-        
-        # Register result database
-        strategy.register_result_db(self.result_db)
-        
-        # Register units (after md_engine so contract info is available)
-        for dmu in dmus:
-            strategy.register_dmu(dmu, recalculate=recalculate)
-        
-        for peu in peus:
-            strategy.register_peu(peu, recalculate=recalculate)
-        
-        # Run strategy
-        # bgm is for constant background params.
-        # Previous results are handled by Strategy internally via result_db's
-        # existed_data mechanism.
-        strategy.run(bgm=bgm)
-        
-        # Return results
-        return pd.DataFrame.from_dict(
-            strategy.unit_results, orient="index"
-        )
-    
+        strategy = self._build_strategy(dmus, peus, recalculate)
+        strategy.run(sym=contract, dates=trade_date, bgm=bgm)
+        return pd.DataFrame.from_dict(strategy.unit_results, orient="index")
+
     def _run_strategy_multi_day(
         self,
         dmus: List[Any],
@@ -268,11 +240,12 @@ class FactorCalculator:
         fail_fast: bool,
     ) -> pd.DataFrame:
         """
-        Run factor calculation over a date range, reusing Strategy and MdEngine.
+        Run factor calculation over a date range.
 
-        Creates Strategy, MdEngine, and registers DMU/PEU units once, then
-        iterates over each date: prepares data, runs the strategy, collects
-        results, saves them, and resets units for the next day.
+        Delegates the multi-day loop to Strategy.run(sym, dates), which
+        handles prepare_data, run, save, and on_end_of_day internally.
+        FactorCalculator adds progress logging, error handling, and
+        result merging on top.
 
         Args:
             dmus: List of DMU instances.
@@ -292,15 +265,7 @@ class FactorCalculator:
         dates = self._generate_date_range(start_date, end_date)
         total = len(dates)
 
-        # Create instances ONCE
-        strategy = Strategy(position_pnl_dmu_class=PositionPnlDMU)
-        md_engine = FuturesMdEngine(base_path=self.md_directory)
-        strategy.register_result_db(self.result_db)
-
-        # Defer md_engine and unit registration until the first successful
-        # prepare_data, because register_md_engine needs cur_sym to set
-        # contract_info, and register_dmu/peu needs contract_info.
-        units_registered = False
+        strategy = self._build_strategy(dmus, peus, recalculate)
 
         results_list: List[pd.DataFrame] = []
         failed_dates: List[Tuple[date, Exception]] = []
@@ -310,24 +275,11 @@ class FactorCalculator:
         for i, current_date in enumerate(dates, 1):
             logger.info(f"[{i}/{total}] 正在计算 {current_date}")
             try:
-                md_engine.prepare_data(sym=contract, date=current_date)
-
-                # Register units on first successful data load (contract_info now available)
-                if not units_registered:
-                    strategy.register_md_engine(md_engine)
-                    for dmu in dmus:
-                        strategy.register_dmu(dmu, recalculate=recalculate)
-                    for peu in peus:
-                        strategy.register_peu(peu, recalculate=recalculate)
-                    units_registered = True
-
-                strategy.run(bgm=bgm)
+                strategy.run(sym=contract, dates=current_date, bgm=bgm)
 
                 day_result = pd.DataFrame.from_dict(
                     strategy.unit_results, orient="index"
                 )
-
-                # Strategy.run() already saves via result_db internally.
                 day_result["trade_date"] = str(current_date)
                 results_list.append(day_result)
                 success_count += 1
@@ -336,8 +288,6 @@ class FactorCalculator:
                     raise
                 logger.error(f"计算 {current_date} 失败: {e}")
                 failed_dates.append((current_date, e))
-            finally:
-                self._reset_units_end_of_day(strategy)
 
         elapsed = time.time() - t0
         logger.info(
@@ -353,19 +303,25 @@ class FactorCalculator:
             return pd.concat(results_list, ignore_index=True)
         return pd.DataFrame()
 
-    def _reset_units_end_of_day(self, strategy: Strategy) -> None:
+    def _build_strategy(
+        self,
+        dmus: List[Any],
+        peus: List[Any],
+        recalculate: bool,
+    ) -> Strategy:
         """
-        Call on_end_of_day on all registered DMU/PEU units in the strategy.
-
-        Units that do not implement on_end_of_day are skipped with a warning.
+        Create and configure a Strategy instance with MdEngine, ResultDB,
+        and all DMU/PEU units registered.
         """
-        for unit in list(strategy.dmus) + list(strategy.peus):
-            if hasattr(unit, "on_end_of_day"):
-                unit.on_end_of_day()
-            else:
-                logger.warning(
-                    f"Unit {unit.name} does not have on_end_of_day method, skipping day-end reset."
-                )
+        strategy = Strategy(position_pnl_dmu_class=PositionPnlDMU)
+        md_engine = FuturesMdEngine(base_path=self.md_directory)
+        strategy.register_md_engine(md_engine)
+        strategy.register_result_db(self.result_db)
+        for dmu in dmus:
+            strategy.register_dmu(dmu, recalculate=recalculate)
+        for peu in peus:
+            strategy.register_peu(peu, recalculate=recalculate)
+        return strategy
 
     @staticmethod
     def _normalize_date(d: Union[str, date]) -> date:
