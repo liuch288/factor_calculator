@@ -122,4 +122,13 @@ KlineDMU(N) ──→ KlinePatternDMU(interval=N)
 
 ## 参考示例
 
-详见本目录下的编号脚本（01-06），每个文件的 docstring 记录了完整的用户对话和 Agent 操作过程。
+详见 `examples/` 目录下的编号脚本（01-06），每个文件的 docstring 记录了完整的用户对话和 Agent 操作过程。
+
+| 文件 | 说明 |
+|------|------|
+| `examples/01_inspect_peu_params.py` | 动态查看任意 DMU/PEU 类的构造函数签名 |
+| `examples/02_run_mddmu.py` | 最简单的因子计算（MdDMU，无参数无依赖） |
+| `examples/03_cli_usage.sh` | CLI 命令行调用示例（可在任意目录运行） |
+| `examples/04_run_biquotepeu.py` | 自动处理前置依赖的复杂计算（MoSplitDMU → BiquotePEU） |
+| `examples/05_run_klinedmu.py` | 计算 KlineDMU 1min 和 5min K 线 |
+| `examples/06_run_klinepatterndmu.py` | 计算 KlinePatternDMU K 线形态识别（依赖 KlineDMU） |
