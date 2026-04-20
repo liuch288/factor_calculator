@@ -18,5 +18,8 @@ dev = [
     "pytest",
 ]
 
+[tool.setuptools.packages.find]
+include = ["factor_calculator*"]
+
 [project.scripts]
 factor-calculator = "factor_calculator.cli:main"
