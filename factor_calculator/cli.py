@@ -15,16 +15,26 @@ from .factory import get_available_classes, parse_unit_spec
 
 def list_units(args):
     """List available DMU or PEU classes."""
-    suffix = None
     if args.dmu:
-        suffix = "DMU"
+        classes = get_available_classes("DMU")
+        print("Available DMU classes:")
+        for cls in classes:
+            print(f"  - {cls}")
     elif args.peu:
-        suffix = "PEU"
-    
-    classes = get_available_classes(suffix)
-    print(f"Available {suffix or 'Unit'} classes:")
-    for cls in classes:
-        print(f"  - {cls}")
+        classes = get_available_classes("PEU")
+        print("Available PEU classes:")
+        for cls in classes:
+            print(f"  - {cls}")
+    else:
+        dmu_classes = get_available_classes("DMU")
+        peu_classes = get_available_classes("PEU")
+        print("Available DMU classes:")
+        for cls in dmu_classes:
+            print(f"  - {cls}")
+        print()
+        print("Available PEU classes:")
+        for cls in peu_classes:
+            print(f"  - {cls}")
 
 
 def calculate(args):
@@ -120,8 +130,8 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         "calculate", help="Calculate factors"
     )
     calc_parser.add_argument(
-        "--db", dest="db_directory", required=True,
-        help="Directory containing result database"
+        "--db", dest="db_directory", default=None,
+        help="Directory containing result database (default: use framework default)"
     )
     calc_parser.add_argument(
         "--md", dest="md_directory",
@@ -169,8 +179,8 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         "factors", help="Show existing factors"
     )
     show_parser.add_argument(
-        "--db", dest="db_directory", required=True,
-        help="Directory containing result database"
+        "--db", dest="db_directory", default=None,
+        help="Directory containing result database (default: use framework default)"
     )
     show_parser.add_argument(
         "--contract", required=True,
