@@ -78,6 +78,7 @@ class FactorCalculator:
         start_date: Optional[Union[str, date]] = None,
         end_date: Optional[Union[str, date]] = None,
         fail_fast: bool = False,
+        show_progress: bool = True,
     ) -> pd.DataFrame:
         """
         Execute factor calculation.
@@ -104,6 +105,8 @@ class FactorCalculator:
             fail_fast: If True, stop immediately on the first daily
                 calculation failure. Defaults to False (skip failed
                 dates and continue).
+            show_progress: If True, show a progress bar for each day's
+                tick-level calculation. Defaults to True.
             
         Returns:
             DataFrame containing calculated factor results.
@@ -157,6 +160,7 @@ class FactorCalculator:
                 bgm=bgm,
                 recalculate=recalculate,
                 fail_fast=fail_fast,
+                show_progress=show_progress,
             )
 
         # Single-day mode (existing behavior)
@@ -168,6 +172,7 @@ class FactorCalculator:
             frequency=frequency,
             bgm=bgm,
             recalculate=recalculate,
+            show_progress=show_progress,
         )
     
     def _parse_units(
@@ -207,6 +212,7 @@ class FactorCalculator:
         frequency: str,
         bgm: Optional[Dict[str, Any]],
         recalculate: bool,
+        show_progress: bool = False,
     ) -> pd.DataFrame:
         """
         Run the RBT Strategy to compute factors for a single date.
@@ -224,7 +230,7 @@ class FactorCalculator:
             DataFrame containing calculated factors
         """
         strategy = self._build_strategy(dmus, peus, recalculate)
-        strategy.run(sym=contract, dates=trade_date, bgm=bgm)
+        strategy.run(sym=contract, dates=trade_date, show_progress=show_progress, bgm=bgm)
         return pd.DataFrame.from_dict(strategy.unit_results, orient="index")
 
     def _run_strategy_multi_day(
@@ -238,6 +244,7 @@ class FactorCalculator:
         bgm: Optional[Dict[str, Any]],
         recalculate: bool,
         fail_fast: bool,
+        show_progress: bool = False,
     ) -> pd.DataFrame:
         """
         Run factor calculation over a date range.
@@ -275,7 +282,7 @@ class FactorCalculator:
         for i, current_date in enumerate(dates, 1):
             logger.info(f"[{i}/{total}] 正在计算 {current_date}")
             try:
-                strategy.run(sym=contract, dates=current_date, bgm=bgm)
+                strategy.run(sym=contract, dates=current_date, show_progress=show_progress, bgm=bgm)
 
                 day_result = pd.DataFrame.from_dict(
                     strategy.unit_results, orient="index"
