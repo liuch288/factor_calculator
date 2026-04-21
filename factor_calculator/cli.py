@@ -13,6 +13,31 @@ from .core import FactorCalculator
 from .factory import get_available_classes, parse_unit_spec
 
 
+def _split_units(raw: str) -> List[str]:
+    """Split a comma-separated units string, respecting parentheses.
+
+    E.g. "MoSplitDMU,BiquotePEU(600,1,1)" -> ["MoSplitDMU", "BiquotePEU(600,1,1)"]
+    """
+    units = []
+    depth = 0
+    current: List[str] = []
+    for ch in raw:
+        if ch == "(":
+            depth += 1
+            current.append(ch)
+        elif ch == ")":
+            depth -= 1
+            current.append(ch)
+        elif ch == "," and depth == 0:
+            units.append("".join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        units.append("".join(current).strip())
+    return [u for u in units if u]
+
+
 def list_units(args):
     """List available DMU or PEU classes."""
     if args.dmu:
@@ -62,7 +87,7 @@ def calculate(args):
         md_directory=args.md_directory,
     )
 
-    units = args.units.split(",") if args.units else []
+    units = _split_units(args.units) if args.units else []
 
     if has_start and has_end:
         # Multi-day mode
