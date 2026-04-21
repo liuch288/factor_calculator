@@ -74,6 +74,7 @@ def calculate(args):
             frequency=args.frequency,
             recalculate=args.recalculate,
             fail_fast=args.fail_fast,
+            show_progress=not args.no_progress,
         )
     else:
         # Single-day mode
@@ -83,6 +84,7 @@ def calculate(args):
             trade_date=args.date,
             frequency=args.frequency,
             recalculate=args.recalculate,
+            show_progress=not args.no_progress,
         )
 
     # Output results
@@ -172,6 +174,10 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     calc_parser.add_argument(
         "-o", "--output",
         help="Output file for results (pickle format)"
+    )
+    calc_parser.add_argument(
+        "--no-progress", action="store_true",
+        help="Disable tick-level progress bar"
     )
     
     # Show factors command
