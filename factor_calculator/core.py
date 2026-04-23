@@ -23,6 +23,7 @@ from rbt.result_db.fs_result_db import FsResultDB
 from rbt.strategy import Strategy
 
 from .factory import create_unit, create_units
+from .dominant import parse_alias, expand_to_dominant_dates
 
 
 class FactorCalculator:
@@ -82,15 +83,18 @@ class FactorCalculator:
     ) -> pd.DataFrame:
         """
         Execute factor calculation.
-        
+
         Supports two modes:
         - Single-day mode: provide ``trade_date`` only.
         - Multi-day mode: provide ``start_date`` and ``end_date``.
         The two modes are mutually exclusive.
-        
+
         Args:
             units: List of unit specifications (e.g., ["KlineDMU(5)", "BiquotePEU(60)"])
-            contract: Contract symbol (e.g., "IF2403")
+            contract: Contract symbol or dominant alias (e.g., "IF2403" or "TL01").
+                If a dominant alias like "TL01" is detected, it is automatically
+                expanded to the corresponding front-month contract(s) for the
+                target date(s) via market-specs.
             trade_date: Trade date as YYYY-MM-DD string or datetime.date.
                 Used for single-day mode. Cannot be combined with
                 start_date/end_date.
@@ -107,19 +111,59 @@ class FactorCalculator:
                 dates and continue).
             show_progress: If True, show a progress bar for each day's
                 tick-level calculation. Defaults to True.
-            
+
         Returns:
             DataFrame containing calculated factor results.
             In multi-day mode the DataFrame includes a ``trade_date``
             column identifying each row's trading date.
-            
+
         Raises:
             ValueError: If date parameters are invalid or conflicting.
         """
+        # --- Detect and expand dominant alias ---
+        raw_alias = contract  # keep original for logging
+        alias = parse_alias(contract)
+        if alias is not None and alias.is_dominant:
+            # Normalize dates
+            if trade_date is not None:
+                normalized_dates = [self._normalize_date_str(trade_date)]
+            elif start_date is not None and end_date is not None:
+                dates = self._generate_date_range(
+                    self._normalize_date(start_date),
+                    self._normalize_date(end_date),
+                )
+                normalized_dates = [str(d) for d in dates]
+            else:
+                raise ValueError(
+                    "Dominant alias requires trade_date or start_date/end_date."
+                )
+            expanded = expand_to_dominant_dates(alias.symbol, normalized_dates)
+            if not expanded:
+                logger.warning(
+                    f"No dominant contract found for {alias.symbol} "
+                    f"in date range {normalized_dates[0]}~{normalized_dates[-1]}"
+                )
+                return pd.DataFrame()
+            # Resolve to a single contract for single-day mode
+            if trade_date is not None:
+                contract = expanded[0][1]  # e.g. "TL2502"
+                logger.info(
+                    f"Dominant alias '{raw_alias}' resolved to contract '{contract}'"
+                )
+            else:
+                # Multi-day: pass the full expansion list via a special attribute
+                # so _run_strategy_multi_day_dominant can use it directly.
+                self._dominant_expansion = expanded
+        else:
+            self._dominant_expansion = None
         # --- Parameter validation ---
         has_trade = trade_date is not None
         has_start = start_date is not None
         has_end = end_date is not None
+
+        # Remove _dominant_expansion after reading to avoid leakage
+        dominant_expansion = getattr(self, "_dominant_expansion", None)
+        self._dominant_expansion = None
 
         if has_trade and (has_start or has_end):
             raise ValueError(
@@ -150,6 +194,18 @@ class FactorCalculator:
 
         # Multi-day mode
         if has_start and has_end:
+            # Dominant alias multi-day: use pre-expanded (date, contract) list
+            if dominant_expansion:
+                return self._run_strategy_multi_day_dominant(
+                    dmus=dmus,
+                    peus=peus,
+                    dominant_expansion=dominant_expansion,
+                    frequency=frequency,
+                    bgm=bgm,
+                    recalculate=recalculate,
+                    fail_fast=fail_fast,
+                    show_progress=show_progress,
+                )
             return self._run_strategy_multi_day(
                 dmus=dmus,
                 peus=peus,
@@ -331,6 +387,26 @@ class FactorCalculator:
         return strategy
 
     @staticmethod
+    def _normalize_date_str(d: Union[str, date]) -> str:
+        """
+        Normalize a date to a YYYY-MM-DD string.
+
+        Args:
+            d: Date as string ("YYYY-MM-DD" or "YYYYMMDD") or datetime.date.
+
+        Returns:
+            YYYY-MM-DD string.
+        """
+        if isinstance(d, datetime.datetime):
+            return d.strftime("%Y-%m-%d")
+        if isinstance(d, datetime.date):
+            return d.strftime("%Y-%m-%d")
+        s = str(d).strip()
+        if len(s) == 8 and s.isdigit():
+            return f"{s[:4]}-{s[4:6]}-{s[6:8]}"
+        return s  # already YYYY-MM-DD
+
+    @staticmethod
     def _normalize_date(d: Union[str, date]) -> date:
         """
         Normalize a date input to a datetime.date object.
@@ -358,6 +434,80 @@ class FactorCalculator:
         raise ValueError(
             f"Unsupported date type: {type(d).__name__}. Expected str or datetime.date."
         )
+
+    def _run_strategy_multi_day_dominant(
+        self,
+        dmus: List[Any],
+        peus: List[Any],
+        dominant_expansion: list[tuple[str, str]],
+        frequency: str,
+        bgm: Optional[Dict[str, Any]],
+        recalculate: bool,
+        fail_fast: bool,
+        show_progress: bool = False,
+    ) -> pd.DataFrame:
+        """
+        Run factor calculation over a pre-expanded dominant contract list.
+
+        Each (date, contract) in dominant_expansion may have a different
+        contract code (when the dominant switches mid-period), unlike
+        _run_strategy_multi_day which uses the same contract for every date.
+
+        Args:
+            dmus: List of DMU instances.
+            peus: List of PEU instances.
+            dominant_expansion: List of (date_str, contract) tuples, e.g.
+                [("2025-01-02", "TL2501"), ("2025-01-03", "TL2502"), ...].
+            frequency: Data frequency.
+            bgm: Background parameters dict or None.
+            recalculate: Whether to recalculate existing factors.
+            fail_fast: If True, raise on first daily failure.
+            show_progress: If True, show a progress bar.
+
+        Returns:
+            Merged DataFrame with ``trade_date`` and ``dominant_contract`` columns.
+        """
+        total = len(dominant_expansion)
+        strategy = self._build_strategy(dmus, peus, recalculate)
+        results_list: List[pd.DataFrame] = []
+        failed_dates: List[Tuple[str, Exception]] = []
+        success_count = 0
+        t0 = time.time()
+
+        for i, (date_str, contract) in enumerate(dominant_expansion, 1):
+            logger.info(f"[{i}/{total}] 正在计算 {date_str} @ {contract}")
+            try:
+                current_date = self._normalize_date(date_str)
+                strategy.run(
+                    sym=contract,
+                    dates=current_date,
+                    show_progress=show_progress,
+                    bgm=bgm,
+                )
+                day_result = pd.DataFrame.from_dict(
+                    strategy.unit_results, orient="index"
+                )
+                day_result["trade_date"] = date_str
+                day_result["dominant_contract"] = contract
+                results_list.append(day_result)
+                success_count += 1
+            except Exception as e:
+                if fail_fast:
+                    raise
+                logger.error(f"计算 {date_str} ({contract}) 失败: {e}")
+                failed_dates.append((date_str, e))
+
+        elapsed = time.time() - t0
+        logger.info(
+            f"主力合约多天计算完成: {success_count}/{total} 天成功, 耗时 {elapsed:.1f}s"
+        )
+
+        if failed_dates:
+            logger.warning(f"失败日期: {[d for d, _ in failed_dates]}")
+
+        if results_list:
+            return pd.concat(results_list, ignore_index=True)
+        return pd.DataFrame()
 
     @staticmethod
     def _generate_date_range(start_date: date, end_date: date) -> List[date]:
