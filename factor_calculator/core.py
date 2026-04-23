@@ -150,20 +150,15 @@ class FactorCalculator:
                 logger.info(
                     f"Dominant alias '{raw_alias}' resolved to contract '{contract}'"
                 )
+                dominant_expansion = None
             else:
-                # Multi-day: pass the full expansion list via a special attribute
-                # so _run_strategy_multi_day_dominant can use it directly.
-                self._dominant_expansion = expanded
+                dominant_expansion = expanded
         else:
-            self._dominant_expansion = None
+            dominant_expansion = None
         # --- Parameter validation ---
         has_trade = trade_date is not None
         has_start = start_date is not None
         has_end = end_date is not None
-
-        # Remove _dominant_expansion after reading to avoid leakage
-        dominant_expansion = getattr(self, "_dominant_expansion", None)
-        self._dominant_expansion = None
 
         if has_trade and (has_start or has_end):
             raise ValueError(
