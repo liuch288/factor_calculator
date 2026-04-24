@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 import pandas as pd
 
-from rbt.dmu import DecisionMakingUnit, PositionPnlDMU
+from rbt.dmu import DecisionMakingUnit
 from rbt.md import FuturesMdEngine
 from rbt.peu import PnlEstimateUnit
 from rbt.result_db.fs_result_db import FsResultDB
@@ -371,7 +371,7 @@ class FactorCalculator:
         Create and configure a Strategy instance with MdEngine, ResultDB,
         and all DMU/PEU units registered.
         """
-        strategy = Strategy(position_pnl_dmu_class=PositionPnlDMU)
+        strategy = Strategy(position_pnl_dmu_class=None)
         md_engine = FuturesMdEngine(base_path=self.md_directory)
         strategy.register_md_engine(md_engine)
         strategy.register_result_db(self.result_db)
