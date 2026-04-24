@@ -18,7 +18,7 @@ from .factory import (
     parse_value,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 __all__ = [
     "FactorCalculator",
