@@ -371,7 +371,7 @@ class FactorCalculator:
         Create and configure a Strategy instance with MdEngine, ResultDB,
         and all DMU/PEU units registered.
         """
-        strategy = Strategy()
+        strategy = Strategy(position_pnl_dmu_class=None)
         md_engine = FuturesMdEngine(base_path=self.md_directory)
         strategy.register_md_engine(md_engine)
         strategy.register_result_db(self.result_db)
