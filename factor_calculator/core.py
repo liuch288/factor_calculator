@@ -24,6 +24,7 @@ from rbt.strategy import Strategy
 
 from .factory import create_unit, create_units
 from .dominant import parse_alias, expand_to_dominant_dates
+from .progress import ProgressTracker
 
 
 class FactorCalculator:
@@ -67,6 +68,21 @@ class FactorCalculator:
         
         # Initialize result database
         self.result_db = FsResultDB(self.root_path, self.frequency)
+        
+        # Progress tracking
+        self._last_task_id: Optional[str] = None
+        self._progress_tracker: Optional[Any] = None
+    
+    @property
+    def last_task_id(self) -> Optional[str]:
+        """
+        Get the last created task ID.
+        
+        Returns:
+            The task_id of the last started progress-tracked calculation,
+            or None if progress tracking was not enabled.
+        """
+        return self._last_task_id
     
     def calculate(
         self,
@@ -111,6 +127,7 @@ class FactorCalculator:
                 dates and continue).
             show_progress: If True, show a progress bar for each day's
                 tick-level calculation. Defaults to True.
+            Progress is automatically saved to ~/.fc/progress/
 
         Returns:
             DataFrame containing calculated factor results.
@@ -184,6 +201,46 @@ class FactorCalculator:
         if has_trade:
             trade_date = self._normalize_date(trade_date)
 
+        # --- Initialize progress tracker (always enabled) ---
+        tracker = None
+        try:
+            tracker = ProgressTracker()
+            if not tracker.is_available:
+                raise IOError("Storage not available")
+            # Determine total days for task creation
+            if has_start and has_end:
+                total_days = len(self._generate_date_range(start_date, end_date))
+            else:
+                total_days = 1
+            
+            # Prepare date range for task
+            if has_trade:
+                date_range = (self._normalize_date_str(trade_date), self._normalize_date_str(trade_date))
+            elif has_start and has_end:
+                date_range = (self._normalize_date_str(start_date), self._normalize_date_str(end_date))
+            else:
+                date_range = ("", "")
+            
+            # Start task
+            task_id = tracker.start_task(
+                units=units,
+                contract=contract,
+                date_range=date_range,
+                frequency=frequency,
+                total_days=total_days,
+            )
+            self._last_task_id = task_id
+            self._progress_tracker = tracker
+            tracker.log(task_id, "INFO", f"Task started: {contract}, {total_days} day(s)")
+        except Exception as e:
+            logger.warning(
+                f"Progress tracking unavailable (storage failure): {e}. "
+                "Continuing calculation without progress tracking."
+            )
+            tracker = None
+            self._last_task_id = None
+            self._progress_tracker = None
+
         # Create unit instances from specifications
         dmus, peus = self._parse_units(units)
 
@@ -200,6 +257,7 @@ class FactorCalculator:
                     recalculate=recalculate,
                     fail_fast=fail_fast,
                     show_progress=show_progress,
+                    tracker=tracker,
                 )
             return self._run_strategy_multi_day(
                 dmus=dmus,
@@ -212,6 +270,7 @@ class FactorCalculator:
                 recalculate=recalculate,
                 fail_fast=fail_fast,
                 show_progress=show_progress,
+                tracker=tracker,
             )
 
         # Single-day mode (existing behavior)
@@ -224,6 +283,7 @@ class FactorCalculator:
             bgm=bgm,
             recalculate=recalculate,
             show_progress=show_progress,
+            tracker=tracker,
         )
     
     def _parse_units(
@@ -264,6 +324,7 @@ class FactorCalculator:
         bgm: Optional[Dict[str, Any]],
         recalculate: bool,
         show_progress: bool = False,
+        tracker: Optional[Any] = None,
     ) -> pd.DataFrame:
         """
         Run the RBT Strategy to compute factors for a single date.
@@ -276,13 +337,45 @@ class FactorCalculator:
             frequency: Data frequency
             bgm: Background parameters or None
             recalculate: Whether to recalculate existing factors
+            show_progress: Whether to show progress bar
+            tracker: Optional ProgressTracker instance for progress tracking
 
         Returns:
             DataFrame containing calculated factors
         """
-        strategy = self._build_strategy(dmus, peus, recalculate)
-        strategy.run(sym=contract, dates=trade_date, show_progress=show_progress, bgm=bgm)
-        return pd.DataFrame.from_dict(strategy.unit_results, orient="index")
+        task_id = self._last_task_id
+        tracker_available = tracker is not None and tracker.is_available
+        
+        try:
+            if tracker_available:
+                tracker.log(task_id, "INFO", f"Starting calculation for {trade_date}")
+            
+            strategy = self._build_strategy(dmus, peus, recalculate)
+            strategy.run(sym=contract, dates=trade_date, show_progress=show_progress, bgm=bgm)
+            
+            # Update progress for single-day (complete)
+            if tracker_available:
+                tracker.update_progress(
+                    task_id=task_id,
+                    current_day=1,
+                    total_days=1,
+                    day_progress=100,
+                    message=f"Completed {trade_date}",
+                )
+            
+            result = pd.DataFrame.from_dict(strategy.unit_results, orient="index")
+            
+            if tracker_available:
+                tracker.log(task_id, "INFO", f"Calculation completed for {trade_date}: {len(result)} rows")
+            
+            return result
+        except Exception as e:
+            if tracker_available:
+                try:
+                    tracker.log(task_id, "ERROR", f"Calculation failed for {trade_date}: {e}")
+                except Exception:
+                    pass
+            raise
 
     def _run_strategy_multi_day(
         self,
@@ -296,6 +389,7 @@ class FactorCalculator:
         recalculate: bool,
         fail_fast: bool,
         show_progress: bool = False,
+        tracker: Optional[Any] = None,
     ) -> pd.DataFrame:
         """
         Run factor calculation over a date range.
@@ -315,6 +409,8 @@ class FactorCalculator:
             bgm: Background parameters dict or None.
             recalculate: Whether to recalculate existing factors.
             fail_fast: If True, raise on first daily failure.
+            show_progress: Whether to show progress bar.
+            tracker: Optional ProgressTracker instance for progress tracking.
 
         Returns:
             Merged DataFrame with a ``trade_date`` column, or empty DataFrame
@@ -322,6 +418,11 @@ class FactorCalculator:
         """
         dates = self._generate_date_range(start_date, end_date)
         total = len(dates)
+        task_id = self._last_task_id
+        tracker_available = tracker is not None and tracker.is_available
+
+        if tracker_available:
+            tracker.log(task_id, "INFO", f"Starting multi-day calculation: {total} days")
 
         strategy = self._build_strategy(dmus, peus, recalculate)
 
@@ -332,6 +433,10 @@ class FactorCalculator:
 
         for i, current_date in enumerate(dates, 1):
             logger.info(f"[{i}/{total}] 正在计算 {current_date}")
+            
+            if tracker_available:
+                tracker.log(task_id, "INFO", f"Processing day {i}/{total}: {current_date}")
+            
             try:
                 strategy.run(sym=contract, dates=current_date, show_progress=show_progress, bgm=bgm)
 
@@ -341,11 +446,27 @@ class FactorCalculator:
                 day_result["trade_date"] = str(current_date)
                 results_list.append(day_result)
                 success_count += 1
+                
             except Exception as e:
                 if fail_fast:
                     raise
                 logger.error(f"计算 {current_date} 失败: {e}")
+                if tracker_available:
+                    try:
+                        tracker.log(task_id, "ERROR", f"Day {i}/{total} failed: {current_date} - {e}")
+                    except Exception:
+                        pass
                 failed_dates.append((current_date, e))
+            
+            # Update progress after each day (both success and failed count as completed)
+            if tracker_available:
+                processed_days = success_count + len(failed_dates)
+                tracker.update_progress(
+                    task_id=task_id,
+                    current_day=processed_days,
+                    total_days=total,
+                    day_progress=100,
+                )
 
         elapsed = time.time() - t0
         logger.info(
@@ -356,6 +477,24 @@ class FactorCalculator:
             logger.warning(
                 f"失败日期: {[str(d) for d, _ in failed_dates]}"
             )
+
+        # Complete the task
+        if tracker_available:
+            status = "success" if not failed_dates else ("failed" if fail_fast else "partial")
+            tracker.complete_task(
+                task_id=task_id,
+                status=status,
+                result_summary={
+                    "total_days": total,
+                    "success_count": success_count,
+                    "failed_count": len(failed_dates),
+                    "elapsed_seconds": round(elapsed, 1),
+                },
+            )
+            try:
+                tracker.log(task_id, "INFO", f"Multi-day calculation completed: {success_count}/{total} succeeded")
+            except Exception:
+                pass
 
         if results_list:
             return pd.concat(results_list, ignore_index=True)
@@ -440,6 +579,7 @@ class FactorCalculator:
         recalculate: bool,
         fail_fast: bool,
         show_progress: bool = False,
+        tracker: Optional[Any] = None,
     ) -> pd.DataFrame:
         """
         Run factor calculation over a pre-expanded dominant contract list.
@@ -457,12 +597,19 @@ class FactorCalculator:
             bgm: Background parameters dict or None.
             recalculate: Whether to recalculate existing factors.
             fail_fast: If True, raise on first daily failure.
-            show_progress: If True, show a progress bar.
+            show_progress: Whether to show progress bar.
+            tracker: Optional ProgressTracker instance for progress tracking.
 
         Returns:
             Merged DataFrame with ``trade_date`` and ``dominant_contract`` columns.
         """
         total = len(dominant_expansion)
+        task_id = self._last_task_id
+        tracker_available = tracker is not None and tracker.is_available
+
+        if tracker_available:
+            tracker.log(task_id, "INFO", f"Starting dominant multi-day calculation: {total} days")
+
         strategy = self._build_strategy(dmus, peus, recalculate)
         results_list: List[pd.DataFrame] = []
         failed_dates: List[Tuple[str, Exception]] = []
@@ -471,6 +618,10 @@ class FactorCalculator:
 
         for i, (date_str, contract) in enumerate(dominant_expansion, 1):
             logger.info(f"[{i}/{total}] 正在计算 {date_str} @ {contract}")
+            
+            if tracker_available:
+                tracker.log(task_id, "INFO", f"Processing day {i}/{total}: {date_str} @ {contract}")
+            
             try:
                 current_date = self._normalize_date(date_str)
                 strategy.run(
@@ -486,11 +637,27 @@ class FactorCalculator:
                 day_result["dominant_contract"] = contract
                 results_list.append(day_result)
                 success_count += 1
+                
             except Exception as e:
                 if fail_fast:
                     raise
                 logger.error(f"计算 {date_str} ({contract}) 失败: {e}")
+                if tracker_available:
+                    try:
+                        tracker.log(task_id, "ERROR", f"Day {i}/{total} failed: {date_str} @ {contract} - {e}")
+                    except Exception:
+                        pass
                 failed_dates.append((date_str, e))
+            
+            # Update progress after each day (both success and failed count as completed)
+            if tracker_available:
+                processed_days = success_count + len(failed_dates)
+                tracker.update_progress(
+                    task_id=task_id,
+                    current_day=processed_days,
+                    total_days=total,
+                    day_progress=100,
+                )
 
         elapsed = time.time() - t0
         logger.info(
@@ -499,6 +666,24 @@ class FactorCalculator:
 
         if failed_dates:
             logger.warning(f"失败日期: {[d for d, _ in failed_dates]}")
+
+        # Complete the task
+        if tracker_available:
+            status = "success" if not failed_dates else ("failed" if fail_fast else "partial")
+            tracker.complete_task(
+                task_id=task_id,
+                status=status,
+                result_summary={
+                    "total_days": total,
+                    "success_count": success_count,
+                    "failed_count": len(failed_dates),
+                    "elapsed_seconds": round(elapsed, 1),
+                },
+            )
+            try:
+                tracker.log(task_id, "INFO", f"Dominant multi-day calculation completed: {success_count}/{total} succeeded")
+            except Exception:
+                pass
 
         if results_list:
             return pd.concat(results_list, ignore_index=True)
