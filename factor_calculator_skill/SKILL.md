@@ -9,6 +9,7 @@
 - 对指定合约和日期范围运行因子计算
 - 自动识别并处理 Unit 之间的前置依赖
 - 支持 Python API 和 CLI 两种调用方式
+- 进度跟踪：计算自动保存进度，支持查询任务状态和日志
 
 ## 交互规范（必须遵守）
 
@@ -89,7 +90,30 @@ factor-calculator calculate \
 
 两种方式等价，根据场景选择。CLI 可在任意目录运行。
 
-### Step 5: 处理依赖错误
+### Step 5: 查看进度（新增）
+
+计算自动保存进度到 `~/.fc/progress/`，无需额外操作。
+
+Python：
+```python
+calc = FactorCalculator()
+result = calc.calculate(units=["MdDMU"], contract="IF2403", start_date="2026-01-01", end_date="2026-01-10")
+task_id = calc.last_task_id  # 获取任务ID
+```
+
+CLI：
+```bash
+# 列出所有任务
+factor-calculator progress list
+
+# 查看任务详情
+factor-calculator progress show <task_id>
+
+# 查看任务日志
+factor-calculator progress logs <task_id>
+```
+
+### Step 6: 处理依赖错误
 
 如果计算报错提示依赖缺失，如：
 ```
@@ -132,3 +156,13 @@ KlineDMU(N) ──→ KlinePatternDMU(interval=N)
 | `examples/04_run_biquotepeu.py` | 自动处理前置依赖的复杂计算（MoSplitDMU → BiquotePEU） |
 | `examples/05_run_klinedmu.py` | 计算 KlineDMU 1min 和 5min K 线 |
 | `examples/06_run_klinepatterndmu.py` | 计算 KlinePatternDMU K 线形态识别（依赖 KlineDMU） |
+
+## 进度跟踪命令
+
+| 命令 | 说明 |
+|------|------|
+| `factor-calculator progress list` | 列出所有任务 |
+| `factor-calculator progress list --status running` | 列出运行中的任务 |
+| `factor-calculator progress show <task_id>` | 查看任务详情 |
+| `factor-calculator progress logs <task_id>` | 查看任务日志 |
+| `factor-calculator progress list --storage /path/to/storage` | 指定存储路径 |
