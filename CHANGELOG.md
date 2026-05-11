@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-05-12
+
+### Changed
+- CLI 命令从 `factor-calculator` 改为 `fcc`
+
 ## [0.2.0] - 2026-05-12
 
 ### Added
