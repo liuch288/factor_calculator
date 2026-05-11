@@ -5,55 +5,55 @@
 #
 # Agent 操作：
 #     1. 检查 SpreadDMU 签名为 (self)，无参数
-#     2. 使用 factor-calculator CLI 命令行工具计算
+#     2. 使用 fcc CLI 命令行工具计算
 #
 # 前置条件：
 #     - 已通过 pip install . 安装 factor_calculator 包
 #     - 激活 quantdev conda 环境
-#     - CLI 命令 factor-calculator 可在任意目录下运行，不依赖当前路径
+#     - CLI 命令 fcc 可在任意目录下运行，不依赖当前路径
 #
 # 结果：
 #     18/32 天成功，输出列 SpreadDMU_v0__spread（买卖价差）
 # =============================================================================
 
 # 查看可用的 DMU 和 PEU 类
-factor-calculator list
+fcc list
 
 # 只看 DMU
-factor-calculator list --dmu
+fcc list --dmu
 
 # 只看 PEU
-factor-calculator list --peu
+fcc list --peu
 
 # 计算 SpreadDMU（单日模式）
-factor-calculator calculate \
+fcc calculate \
     --units "SpreadDMU" \
     --contract TL2603 \
     --date 2026-01-05
 
 # 计算 SpreadDMU（多日模式）
-factor-calculator calculate \
+fcc calculate \
     --units "SpreadDMU" \
     --contract TL2603 \
     --start-date 2026-01-05 \
     --end-date 2026-02-05
 
 # 多个 unit 一起算（逗号分隔）
-factor-calculator calculate \
+fcc calculate \
     --units "MdDMU,SpreadDMU" \
     --contract TL2603 \
     --start-date 2026-01-05 \
     --end-date 2026-02-05
 
 # 带参数的 unit
-factor-calculator calculate \
+fcc calculate \
     --units "KlineDMU(5)" \
     --contract TL2603 \
     --start-date 2026-01-05 \
     --end-date 2026-02-05
 
 # 结果输出到文件（pickle 格式）
-factor-calculator calculate \
+fcc calculate \
     --units "SpreadDMU" \
     --contract TL2603 \
     --start-date 2026-01-05 \
@@ -61,7 +61,7 @@ factor-calculator calculate \
     -o result.pkl
 
 # 查看已有因子
-factor-calculator factors \
+fcc factors \
     --contract TL2603 \
     --date 2026-01-05
 
