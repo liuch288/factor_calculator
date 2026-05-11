@@ -60,7 +60,7 @@ print("PEU:", get_available_classes("PEU"))
 
 或 CLI：
 ```bash
-fcc list
+factor-calculator list
 ```
 
 ### Step 4: 执行计算
@@ -81,7 +81,7 @@ result = calc.calculate(
 
 CLI：
 ```bash
-fcc calculate \
+factor-calculator calculate \
     --units "UnitName(param=value)" \
     --contract 合约代码 \
     --start-date YYYY-MM-DD \
@@ -104,13 +104,13 @@ task_id = calc.last_task_id  # 获取任务ID
 CLI：
 ```bash
 # 列出所有任务
-fcc progress list
+factor-calculator progress list
 
 # 查看任务详情
-fcc progress show <task_id>
+factor-calculator progress show <task_id>
 
 # 查看任务日志
-fcc progress logs <task_id>
+factor-calculator progress logs <task_id>
 ```
 
 ### Step 6: 处理依赖错误
@@ -161,8 +161,8 @@ KlineDMU(N) ──→ KlinePatternDMU(interval=N)
 
 | 命令 | 说明 |
 |------|------|
-| `fcc progress list` | 列出所有任务 |
-| `fcc progress list --status running` | 列出运行中的任务 |
-| `fcc progress show <task_id>` | 查看任务详情 |
-| `fcc progress logs <task_id>` | 查看任务日志 |
-| `fcc progress list --storage /path/to/storage` | 指定存储路径 |
+| `factor-calculator progress list` | 列出所有任务 |
+| `factor-calculator progress list --status running` | 列出运行中的任务 |
+| `factor-calculator progress show <task_id>` | 查看任务详情 |
+| `factor-calculator progress logs <task_id>` | 查看任务日志 |
+| `factor-calculator progress list --storage /path/to/storage` | 指定存储路径 |
