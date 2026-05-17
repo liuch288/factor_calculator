@@ -20,7 +20,7 @@ from typing import List, Optional, Dict, Any, Tuple
 from factor_calculator.progress.models import (
     create_task_record,
     create_log_entry,
-    utc_now,
+    get_time_str,
     validate_task_record,
 )
 
@@ -286,7 +286,7 @@ class ProgressTracker:
             "completed_days": completed_days,
             "day_progress": day_progress,
             "total_progress": total_progress,
-            "updated_at": utc_now(),
+            "updated_at": get_time_str(),
         }
         
         if message:
@@ -349,8 +349,8 @@ class ProgressTracker:
         # Prepare updates
         updates = {
             "status": status,
-            "completed_at": utc_now(),
-            "updated_at": utc_now(),
+            "completed_at": get_time_str(),
+            "updated_at": get_time_str(),
         }
         
         if result_summary:

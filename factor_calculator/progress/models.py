@@ -27,11 +27,11 @@ def generate_log_id() -> str:
     return str(uuid.uuid4())
 
 
-def utc_now() -> str:
-    """Get current local time in ISO format.
+def get_time_str() -> str:
+    """Get current system time as string.
     
     Returns:
-        ISO format timestamp string.
+        Time string in YYYY-MM-DD HH:MM:SS format.
     """
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -57,7 +57,7 @@ def create_task_record(
     Returns:
         TASK_RECORD dict with all fields initialized.
     """
-    now = utc_now()
+    now = get_time_str()
     return {
         "task_id": generate_task_id(),
         "created_at": now,
@@ -99,7 +99,7 @@ def create_log_entry(
     return {
         "log_id": generate_log_id(),
         "task_id": task_id,
-        "timestamp": utc_now(),
+        "timestamp": get_time_str(),
         "level": level,
         "message": message,
         "context": context,
