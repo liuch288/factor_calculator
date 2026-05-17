@@ -10,6 +10,7 @@ it falls back to lrbt for lookup.
 
 import ast
 import importlib
+import os
 import re
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
@@ -248,7 +249,6 @@ def create_unit(spec: str) -> Any:
                             return attr
                 except (ImportError, Exception):
                     # Fall back: find class via AST scan without loading
-                    import os
                     spec = importlib.util.find_spec(subname)
                     if spec and spec.origin and os.path.exists(spec.origin):
                         try:
